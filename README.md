@@ -26,7 +26,6 @@
 
 ## 📁 文件结构
 - `VLA_Hub_Simulation_OSM_Refactored.m` - 主程序
-- `examples/sample_outputs/` - 示例输出结果
 - `README.md` - 说明文档
 
 ## 🔧 核心算法
@@ -40,9 +39,6 @@
 - OSM地图选址结果
 - 行人分布仿真
 - 详细KPI报告
-
-## 📄 许可证
-MIT License - 详见 LICENSE 文件
 
 ## 🤝 引用
 如使用本代码，请引用相关论文。
