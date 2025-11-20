@@ -1,0 +1,511 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VLA 交通枢纽仿真 - 自定义区域</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <style>
+        #map { height: 500px; }
+        .card { margin-bottom: 15px; }
+        .region-btn { margin: 2px; }
+        .custom-coords { background: #f8f9fa; padding: 10px; border-radius: 5px; }
+        .simulation-loading {
+            display: none;
+            text-align: center;
+            padding: 10px;
+        }
+        .spinner-border {
+            width: 1.5rem;
+            height: 1.5rem;
+        }
+        .hub-marker {
+            background-color: rgba(255, 0, 0, 0.7);
+            border-radius: 50%;
+            width: 15px;
+            height: 15px;
+            border: 2px solid white;
+        }
+        .demand-marker {
+            background-color: rgba(0, 0, 255, 0.5);
+            border-radius: 50%;
+            width: 8px;
+            height: 8px;
+            border: 1px solid white;
+        }
+        .selected-hub {
+            background-color: rgba(255, 215, 0, 0.8);
+            border: 2px solid #ff9900;
+        }
+        .legend {
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+        .legend-color {
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid mt-3">
+        <h2>🗺️ 自定义区域交通枢纽仿真</h2>
+
+        <div class="row">
+            <!-- 左侧控制面板 -->
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header bg-light">
+                        <h5 class="card-title mb-0">📍 选择仿真区域</h5>
+                    </div>
+                    <div class="card-body">
+                        <!-- 预设城市 -->
+                        <div class="mb-3">
+                            <label class="form-label">🏙️ 预设城市</label>
+                            <div class="d-grid gap-2">
+                                <button class="btn btn-outline-primary region-btn" onclick="selectRegion('beijing')">
+                                    北京南站
+                                </button>
+                                <button class="btn btn-outline-primary region-btn" onclick="selectRegion('shanghai')">
+                                    上海虹桥
+                                </button>
+                                <button class="btn btn-outline-primary region-btn" onclick="selectRegion('guangzhou')">
+                                    广州南站
+                                </button>
+                                <button class="btn btn-outline-primary region-btn" onclick="selectRegion('shenzhen')">
+                                    深圳北站
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- 自定义坐标 -->
+                        <div class="mb-3">
+                            <label class="form-label">🎯 自定义坐标</label>
+                            <div class="custom-coords">
+                                <div class="row">
+                                    <div class="col-6">
+                                        <label class="form-label small">经度</label>
+                                        <input type="number" class="form-control form-control-sm" id="customLng"
+                                               step="0.0001" placeholder="116.378558" value="116.378558">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label small">纬度</label>
+                                        <input type="number" class="form-control form-control-sm" id="customLat"
+                                               step="0.0001" placeholder="39.864444" value="39.864444">
+                                    </div>
+                                </div>
+                                <button class="btn btn-success btn-sm w-100 mt-2" onclick="useCustomCoords()">
+                                    使用自定义坐标
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- 地图选点 -->
+                        <div class="mb-3">
+                            <label class="form-label">🗺️ 地图选点</label>
+                            <div class="alert alert-info small">
+                                💡 直接在地图上点击选择中心点位置
+                            </div>
+                        </div>
+
+                        <!-- 仿真参数 -->
+                        <div class="mb-3">
+                            <label class="form-label">⚙️ 仿真参数</label>
+                            <div class="row">
+                                <div class="col-6">
+                                    <label class="form-label small">需求点数量</label>
+                                    <input type="number" class="form-control form-control-sm" id="nDemand"
+                                           value="150" min="10" max="500">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label small">候选枢纽数</label>
+                                    <input type="number" class="form-control form-control-sm" id="nHubs"
+                                           value="12" min="3" max="50">
+                                </div>
+                            </div>
+                            <div class="row mt-2">
+                                <div class="col-12">
+                                    <label class="form-label small">仿真半径 (公里)</label>
+                                    <input type="range" class="form-range" id="simulationRadius"
+                                           min="1" max="10" step="0.5" value="2">
+                                    <div class="d-flex justify-content-between">
+                                        <small>1km</small>
+                                        <small id="radiusValue">2km</small>
+                                        <small>10km</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button class="btn btn-primary w-100" onclick="runSimulation()">
+                            🚀 开始区域仿真
+                        </button>
+
+                        <div class="simulation-loading mt-2" id="simulationLoading">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">加载中...</span>
+                            </div>
+                            <p class="mt-2">仿真计算中...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 结果显示 -->
+                <div class="card">
+                    <div class="card-header bg-light">
+                        <h5 class="card-title mb-0">📊 仿真结果</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="results">
+                            <p class="text-muted text-center">请先选择区域...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧地图 -->
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                        <h5 class="card-title mb-0">仿真地图</h5>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="toggleLegend()">
+                            图例
+                        </button>
+                    </div>
+                    <div class="card-body p-0 position-relative">
+                        <div id="map"></div>
+                        <div id="legend" class="legend position-absolute bottom-0 end-0 m-3" style="display: none;">
+                            <h6>图例</h6>
+                            <div class="legend-item">
+                                <div class="legend-color" style="background-color: blue;"></div>
+                                <small>中心点</small>
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-color" style="background-color: rgba(255, 0, 0, 0.7);"></div>
+                                <small>候选枢纽</small>
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-color" style="background-color: rgba(0, 0, 255, 0.5);"></div>
+                                <small>需求点</small>
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-color" style="background-color: rgba(255, 215, 0, 0.8);"></div>
+                                <small>最优枢纽</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script>
+        // 预设城市坐标
+        const regions = {
+            'beijing': { name: '北京南站', lat: 39.864444, lng: 116.378558 },
+            'shanghai': { name: '上海虹桥', lat: 31.193687, lng: 121.318542 },
+            'guangzhou': { name: '广州南站', lat: 22.989383, lng: 113.270707 },
+            'shenzhen': { name: '深圳北站', lat: 22.611362, lng: 114.029531 }
+        };
+
+        // 全局变量
+        let map, currentCenter, markers = [];
+        let simulationData = { hubs: [], demands: [] };
+
+        // 初始化地图
+        function initMap() {
+            // 默认显示北京
+            currentCenter = [regions.beijing.lat, regions.beijing.lng];
+
+            map = L.map('map').setView(currentCenter, 14);
+
+            // 添加OSM底图
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors',
+                maxZoom: 18
+            }).addTo(map);
+
+            // 添加点击选点功能
+            map.on('click', function(e) {
+                selectPoint(e.latlng.lat, e.latlng.lng);
+            });
+
+            // 初始标记
+            addCenterMarker(currentCenter[0], currentCenter[1], '北京南站');
+
+            // 初始化半径滑块显示
+            document.getElementById('radiusValue').textContent =
+                document.getElementById('simulationRadius').value + 'km';
+
+            // 监听半径变化
+            document.getElementById('simulationRadius').addEventListener('input', function() {
+                document.getElementById('radiusValue').textContent = this.value + 'km';
+                if (currentCenter) {
+                    updateCenterCircle();
+                }
+            });
+        }
+
+        // 选择预设区域
+        function selectRegion(regionKey) {
+            const region = regions[regionKey];
+            if (region) {
+                currentCenter = [region.lat, region.lng];
+                map.setView(currentCenter, 14);
+                addCenterMarker(region.lat, region.lng, region.name);
+                updateResults(`已选择: ${region.name}`);
+
+                // 更新自定义坐标输入框
+                document.getElementById('customLat').value = region.lat;
+                document.getElementById('customLng').value = region.lng;
+            }
+        }
+
+        // 使用自定义坐标
+        function useCustomCoords() {
+            const lat = parseFloat(document.getElementById('customLat').value);
+            const lng = parseFloat(document.getElementById('customLng').value);
+
+            if (!isNaN(lat) && !isNaN(lng)) {
+                if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+                    currentCenter = [lat, lng];
+                    map.setView(currentCenter, 14);
+                    addCenterMarker(lat, lng, '自定义位置');
+                    updateResults(`已选择自定义位置: ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+                } else {
+                    alert('请输入有效的经纬度坐标！纬度范围：-90~90，经度范围：-180~180');
+                }
+            } else {
+                alert('请输入有效的经纬度坐标！');
+            }
+        }
+
+        // 地图点击选点
+        function selectPoint(lat, lng) {
+            currentCenter = [lat, lng];
+            addCenterMarker(lat, lng, '选中位置');
+            updateResults(`地图选点: ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+
+            // 更新自定义坐标输入框
+            document.getElementById('customLat').value = lat.toFixed(6);
+            document.getElementById('customLng').value = lng.toFixed(6);
+        }
+
+        // 添加中心点标记
+        function addCenterMarker(lat, lng, title) {
+            // 清除旧标记
+            markers.forEach(marker => map.removeLayer(marker));
+            markers = [];
+
+            // 添加新标记
+            const marker = L.marker([lat, lng])
+                .addTo(map)
+                .bindPopup(`<b>${title}</b><br>纬度: ${lat.toFixed(6)}<br>经度: ${lng.toFixed(6)}`)
+                .openPopup();
+
+            markers.push(marker);
+
+            // 更新范围圈
+            updateCenterCircle();
+        }
+
+        // 更新中心点范围圈
+        function updateCenterCircle() {
+            const radius = parseFloat(document.getElementById('simulationRadius').value) * 1000; // 转换为米
+
+            // 添加范围圈
+            const circle = L.circle(currentCenter, {
+                color: 'blue',
+                fillColor: '#30f',
+                fillOpacity: 0.1,
+                radius: radius
+            }).addTo(map);
+
+            markers.push(circle);
+        }
+
+        // 运行仿真
+        function runSimulation() {
+            if (!currentCenter) {
+                alert('请先选择区域！');
+                return;
+            }
+
+            const nDemand = parseInt(document.getElementById('nDemand').value) || 150;
+            const nHubs = parseInt(document.getElementById('nHubs').value) || 12;
+            const radius = parseFloat(document.getElementById('simulationRadius').value);
+
+            // 显示加载状态
+            document.getElementById('simulationLoading').style.display = 'block';
+
+            updateResults(`
+                <div class="alert alert-info">
+                    <strong>🚀 开始区域仿真</strong><br>
+                    📍 中心位置: ${currentCenter[0].toFixed(6)}, ${currentCenter[1].toFixed(6)}<br>
+                    📊 需求点: ${nDemand} 个<br>
+                    🏢 候选枢纽: ${nHubs} 个<br>
+                    📏 仿真半径: ${radius} 公里
+                </div>
+            `);
+
+            // 使用setTimeout模拟计算延迟
+            setTimeout(() => {
+                // 生成候选枢纽
+                const hubs = generateHubsAround(currentCenter, nHubs, radius);
+
+                // 生成需求点
+                const demands = generateDemandPoints(currentCenter, nDemand, radius);
+
+                // 保存仿真数据
+                simulationData = { hubs, demands };
+
+                // 在地图上显示
+                displaySimulationResults(hubs, demands);
+
+                // 隐藏加载状态
+                document.getElementById('simulationLoading').style.display = 'none';
+            }, 1000);
+        }
+
+        // 生成候选枢纽
+        function generateHubsAround(center, count, radiusKm) {
+            const hubs = [];
+            const radiusDeg = radiusKm / 111; // 粗略转换：1度纬度约111公里
+
+            for (let i = 0; i < count; i++) {
+                // 使用极坐标方法生成更均匀的分布
+                const angle = Math.random() * 2 * Math.PI;
+                const distance = Math.random() * radiusDeg * 0.8; // 80%的半径范围内
+
+                hubs.push({
+                    lat: center[0] + distance * Math.sin(angle),
+                    lng: center[1] + distance * Math.cos(angle),
+                    id: i,
+                    capacity: Math.floor(Math.random() * 1000) + 500 // 随机容量
+                });
+            }
+            return hubs;
+        }
+
+        // 生成需求点
+        function generateDemandPoints(center, count, radiusKm) {
+            const points = [];
+            const radiusDeg = radiusKm / 111; // 粗略转换：1度纬度约111公里
+
+            for (let i = 0; i < count; i++) {
+                // 使用极坐标方法生成更均匀的分布
+                const angle = Math.random() * 2 * Math.PI;
+                const distance = Math.random() * radiusDeg;
+
+                points.push({
+                    lat: center[0] + distance * Math.sin(angle),
+                    lng: center[1] + distance * Math.cos(angle),
+                    demand: Math.floor(Math.random() * 100) + 10 // 随机需求
+                });
+            }
+            return points;
+        }
+
+        // 显示仿真结果
+        function displaySimulationResults(hubs, demands) {
+            // 清除旧的可视化
+            markers.forEach(marker => {
+                if (marker instanceof L.Circle || marker instanceof L.CircleMarker) {
+                    map.removeLayer(marker);
+                }
+            });
+
+            // 显示需求点
+            demands.forEach(point => {
+                const marker = L.circleMarker([point.lat, point.lng], {
+                    color: 'blue',
+                    fillColor: '#30f',
+                    fillOpacity: 0.6,
+                    radius: 4
+                }).addTo(map);
+                markers.push(marker);
+            });
+
+            // 显示候选枢纽
+            hubs.forEach((hub, index) => {
+                const isOptimal = index < 3; // 简单模拟：前3个为最优枢纽
+
+                const marker = L.circleMarker([hub.lat, hub.lng], {
+                    color: isOptimal ? '#ff9900' : 'red',
+                    fillColor: isOptimal ? 'rgba(255, 215, 0, 0.8)' : 'rgba(255, 0, 0, 0.7)',
+                    fillOpacity: 0.8,
+                    radius: 8
+                }).addTo(map).bindPopup(`
+                    <b>${isOptimal ? '★ 最优枢纽' : '候选枢纽'} ${index + 1}</b><br>
+                    容量: ${hub.capacity}<br>
+                    位置: ${hub.lat.toFixed(6)}, ${hub.lng.toFixed(6)}
+                `);
+
+                if (isOptimal) {
+                    marker.setStyle({ className: 'selected-hub' });
+                }
+
+                markers.push(marker);
+            });
+
+            // 计算一些统计信息
+            const totalDemand = demands.reduce((sum, point) => sum + point.demand, 0);
+            const totalCapacity = hubs.reduce((sum, hub) => sum + hub.capacity, 0);
+            const coverageRatio = (totalDemand / totalCapacity * 100).toFixed(1);
+
+            updateResults(`
+                <div class="alert alert-success">
+                    <strong>✅ 仿真完成</strong><br>
+                    🏢 生成候选枢纽: ${hubs.length} 个<br>
+                    📍 生成需求点: ${demands.length} 个<br>
+                    📊 总需求: ${totalDemand} 单位<br>
+                    🏗️ 总容量: ${totalCapacity} 单位<br>
+                    📈 覆盖率: ${coverageRatio}%<br>
+                    🗺️ 查看地图上的可视化结果
+                </div>
+                <button class="btn btn-sm btn-outline-info w-100 mt-2" onclick="exportData()">
+                    导出仿真数据
+                </button>
+            `);
+        }
+
+        // 导出数据
+        function exportData() {
+            const dataStr = JSON.stringify(simulationData, null, 2);
+            const dataBlob = new Blob([dataStr], {type: 'application/json'});
+
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(dataBlob);
+            link.download = 'simulation_data.json';
+            link.click();
+        }
+
+        // 切换图例显示
+        function toggleLegend() {
+            const legend = document.getElementById('legend');
+            legend.style.display = legend.style.display === 'none' ? 'block' : 'none';
+        }
+
+        // 更新结果显示
+        function updateResults(html) {
+            document.getElementById('results').innerHTML = html;
+        }
+
+        // 页面加载时初始化
+        document.addEventListener('DOMContentLoaded', initMap);
+    </script>
+</body>
+</html>
